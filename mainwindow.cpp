@@ -4,30 +4,65 @@
 #include "qcustomplot.h"
 #include <qextserialenumerator.h>
 #include <QColorDialog>
+#include <QDir>
+#include <QTimer>
 
-#define CHANNEL_COUNT 7
+
+#define SEPARATOR " ; "
+QStringList list;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
-    rdy(false)
+    rdy(false),
+    data(NULL),
+    inifile(new QFile)
 {
     ui->setupUi(this);
 
-    FillCombo();
-    roznout(false);
+    PortSettings nastaveni;
+    nastaveni.BaudRate = BAUD1152000;
+    nastaveni.DataBits = DATA_8;
+    nastaveni.FlowControl = FLOW_HARDWARE;
+    nastaveni.Parity = PAR_NONE;
+    nastaveni.StopBits = STOP_1;
+    nastaveni.Timeout_Millisec = 10;
+    comport = new QextSerialPort(nastaveni,QextSerialPort::EventDriven,this);
 
-
-    QStringList list;
+    //parse ini file
     list << "PA1" << "PA2" << "PB0" << "PB1" << "PC1" << "PC2" << "PC5";
 
-    foreach (QString str, list) {
-        addRow(str);
+    QString path = QCoreApplication::applicationDirPath();
+    QString name = "sniffer.ini";
+    path = path + "/" + name;
+    inifile->setFileName(path);
+    bool ok = inifile->open(QFile::ReadOnly);
+
+    inidata_t inidata;
+    if (ok)
+    {
+        QByteArray ini = inifile->readAll();
+        inifile->close();
+        if (ini.count())
+            parseIni(ini,inidata);
+    }
+    prevPort = inidata.port;
+    ui->checkAuto->setChecked(inidata.autoscale);
+    ui->checkRec->setChecked(inidata.record);
+
+    FillCombo();
+    ledka = new HLed;
+    statusBar()->addPermanentWidget(ledka);
+
+    roznout(false);
+
+    for (int i = 0 ; i < CHANNEL_COUNT; i++)
+    {
+        addRow(inidata.table[i]);
     }
 
-
-    //ui->plot->xAxis->setTickLabelType(QCPAxis::ltDateTime);
-    //ui->plot->xAxis->setDateTimeFormat("hh:mm:ss");
+    ui->plot->xAxis->setTickLabelType(QCPAxis::ltDateTime);
+    ui->plot->xAxis->setDateTimeFormat("hh:mm:ss");
     ui->plot->xAxis->setLabel(trUtf8("Čas"));
     ui->plot->yAxis->setLabel(trUtf8("Napětí"));
     ui->plot->legend->setVisible(true);
@@ -37,6 +72,147 @@ MainWindow::MainWindow(QWidget *parent) :
 
     rdy = true;
 
+    inifile->close();
+
+    QTimer::singleShot(100,this,SLOT(saveSetup()));
+}
+
+void MainWindow::saveSetup()
+{
+    inidata_t data;
+
+    data.port = ui->comboPorts->currentText();
+    data.autoscale = ui->checkAuto->isChecked();
+    data.record = ui->checkRec->isChecked();
+
+    for (int i = 0 ; i < CHANNEL_COUNT; i++)
+    {
+        tableRow row;
+        row.farba = ui->table->item(i,4)->backgroundColor();
+        row.name = ui->table->item(i,0)->text();
+        row.port = ui->table->item(i,1)->text();
+        row.visible = false;
+        if (ui->table->item(i,3)->checkState() == Qt::Checked)
+            row.visible = true;
+
+        data.table[i] = row;
+    }
+
+    iniCreate(data);
+
+
+    QTimer::singleShot(100,this,SLOT(saveSetup()));
+}
+
+void MainWindow::iniCreate(const inidata_t &data)
+{
+    inifile->open(QFile::WriteOnly);
+
+    inifile->write("[Global]\n");
+    inifile->write(QString("autoscale=%1\n").arg(data.autoscale).toUtf8());
+    inifile->write(QString("port=%1\n").arg(data.port).toUtf8());
+    inifile->write(QString("record=%1\n").arg(data.record).toUtf8());
+
+    inifile->write("[Table]\n");
+
+    for (int i = 0; i < CHANNEL_COUNT; i++)
+    {
+        QString line;
+        tableRow row = data.table[i];
+
+        line = row.port + "=" + row.name + ";";
+        line += QString("%1;%2;\n").arg(row.visible).arg(row.farba.rgb(),0,16);
+        inifile->write(line.toUtf8());
+    }
+
+    inifile->close();
+}
+
+void MainWindow::parseIni(QByteArray &data,inidata_t & ini)
+{
+    QByteArray global = iniGetSection("Global",data);
+    QByteArray table = iniGetSection("Table",data);
+    QByteArray temp;
+
+    temp = iniGetData("autoscale",global);
+    ini.autoscale = temp.toInt();
+    temp = iniGetData("port",global);
+    ini.port = temp;
+    temp = iniGetData("record",global);
+    ini.record = temp.toInt();
+
+    for (int i = 0 ; i < CHANNEL_COUNT; i++)
+    {
+        temp = iniGetData(list.at(i).toUtf8().constData(),table);
+        tableRow row;
+        QList<QByteArray> lst;
+        row.port = list.at(i);
+        lst = iniGetPar(temp);
+        row.name = lst.at(0);
+        row.visible = lst.at(1).toInt();
+        bool ok;
+        quint32 co = lst.at(2).toLongLong(&ok,16);
+        row.farba = QColor::fromRgb(co);
+
+        ini.table[i] = row;
+    }
+
+    asm("nop");
+}
+
+QList<QByteArray> MainWindow::iniGetPar(const QByteArray &line)
+{
+    QList<QByteArray> ret;
+    int i = 0;
+
+    while(line.indexOf(";",i) != -1)
+    {
+        int j = line.indexOf(";",i);
+        QByteArray par = line.mid(i,j-i);
+        ret.push_back(par.trimmed());
+
+            i = j+1;
+    }
+
+    return ret;
+}
+
+QByteArray MainWindow::iniGetData(const char *par, const QByteArray &sec)
+{
+    QByteArray line;
+    QByteArray str;
+
+    str = par;
+    str += "=";
+
+    int i = sec.indexOf(str);
+    int end = sec.indexOf("\n",i);
+    if (end == -1)
+        end = sec.length();
+
+    line = sec.mid(i,end-i);
+    line = line.trimmed();
+    i = 1 + line.indexOf("=");
+    line.remove(0,i);
+    //ret =
+
+    return line.trimmed();
+}
+
+QByteArray MainWindow::iniGetSection(const char * sec,const QByteArray &ini)
+{
+    QString str = sec;
+    str = "[" + str + "]";
+    int start = ini.indexOf(str);
+    int stop = ini.indexOf("\n[",start+1);
+
+    if (stop == -1)
+        stop = ini.length();
+
+    QByteArray ret = ini.mid(start,stop-start);
+    ret.replace(str," ");
+
+    return ret.trimmed();
 }
 
 MainWindow::~MainWindow()
@@ -48,18 +224,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::FillCombo()
 {
-    ledka = new HLed;
-    statusBar()->addPermanentWidget(ledka);
-
-    PortSettings nastaveni;
-    nastaveni.BaudRate = BAUD1152000;
-    nastaveni.DataBits = DATA_8;
-    nastaveni.FlowControl = FLOW_HARDWARE;
-    nastaveni.Parity = PAR_NONE;
-    nastaveni.StopBits = STOP_1;
-    nastaveni.Timeout_Millisec = 10;
-
-    comport = new QextSerialPort(nastaveni,QextSerialPort::EventDriven,this);
+    ui->comboPorts->clear();
     QList<QextPortInfo> ports = QextSerialEnumerator::getPorts();
 
     QStringList list;
@@ -81,6 +246,10 @@ void MainWindow::FillCombo()
     #endif
 
     ui->comboPorts->addItems(list);
+
+    int i = ui->comboPorts->findText(prevPort);
+    if (i != -1)
+        ui->comboPorts->setCurrentIndex(i);
 }
 
 void MainWindow::roznout(bool enable)
@@ -90,6 +259,8 @@ void MainWindow::roznout(bool enable)
     ui->butStop->setEnabled(enable);
     ui->butClose->setEnabled(enable);
     ui->butOpen->setDisabled(enable);
+    ui->butRefresh->setDisabled(enable);
+    ui->comboPorts->setDisabled(enable);
 }
 
 void MainWindow::on_butOpen_clicked()
@@ -124,10 +295,49 @@ void MainWindow::on_butStart_clicked()
         statusBar()->showMessage(trUtf8("nelze psát do COM"));
         return;
     }
+
+    QString path = QCoreApplication::applicationDirPath();
+    QString name = QDateTime::currentDateTime().toString("dd.mm.yyyy_hh.mm.ss");
+    name += ".csv";
+    path = path + "/" + name;
+
+
+    if (ui->checkRec->isChecked())
+    {
+        statusBar()->showMessage("soubor: " + name);
+        if (data == NULL )
+        {
+            data = new QFile(path);
+            data->open(QFile::WriteOnly);
+            if (data->isWritable())
+            {
+                data->write("Time; Time formated; ");
+                for (int i = 0 ; i < CHANNEL_COUNT; i++)
+                {
+                    data->write(list.at(i).toUtf8());
+                    data->write(SEPARATOR);
+                }
+                data->write("\n");
+
+                data->write("Time; Time formated; ");
+                for (int i = 0 ; i < CHANNEL_COUNT; i++)
+                {
+                    data->write(ui->table->item(i,0)->text().toUtf8());
+                    data->write(SEPARATOR);
+                }
+                data->write("\n");
+                data->close();
+            }
+            else
+            {
+                statusBar()->showMessage(trUtf8("Nelze psát do souboru"),1000);
+            }
+        }
+    }
+
     comport->write("start\n\r");
     on_butClean_clicked();
-
-
+    ui->checkRec->setEnabled(false);
 }
 
 void MainWindow::on_butStop_clicked()
@@ -139,7 +349,13 @@ void MainWindow::on_butStop_clicked()
         return;
     }
     comport->write("stop\n\r");
-
+    if (data)
+    {
+        data->close();
+        data->deleteLater();
+        data = NULL;
+    }
+    ui->checkRec->setEnabled(true);
 }
 
 void MainWindow::comport_newData()
@@ -173,29 +389,67 @@ void MainWindow::comport_newData()
 }
 
 
-void MainWindow::ProcessValues(int *pole)
+void MainWindow::ProcessValues(int *be)
 {
-    for (int i = 0 ; i < CHANNEL_COUNT; i++)
+    float pole[CHANNEL_COUNT];
+
+    QDateTime time = QDateTime::currentDateTime();
+    if (ui->checkRec->isChecked())
     {
-        ui->plot->graph(i)->addData(time.elapsed()/1000.0, pole[i]);
-        ui->table->item(i,2)->setData(Qt::DisplayRole,pole[i]);
+        data->open(QFile::Append);
+        if (data->isWritable())
+        {
+        data->write(QString("%1").arg(time.toTime_t() + time.time().msec() / 1000.0).toUtf8());
+        data->write(SEPARATOR);
+        data->write(time.time().toString("hh:mm:ss.zzz").toUtf8());
+        data->write(SEPARATOR);
+        }
     }
 
-    ui->plot->rescaleAxes();
+    for (int i = 0 ; i < CHANNEL_COUNT; i++)
+    {
+        pole[i] = be[i] /4096.0 * 2.048;
+        ui->plot->graph(i)->addData(time.toTime_t() + time.time().msec() / 1000.0, pole[i]);
+        ui->table->item(i,2)->setData(Qt::DisplayRole,pole[i]);
+
+        //file
+        if (ui->checkRec->isChecked())
+        {
+        if (data->isWritable())
+        {
+            data->write(QString("%1").arg(pole[i]).toUtf8());
+            data->write(SEPARATOR);
+        }
+        else
+        {
+            statusBar()->showMessage(trUtf8("Nelze psát do souboru"),1000);
+        }
+        }
+    }
+
+    if (ui->checkRec->isChecked())
+    {
+        if (data->isWritable())
+            data->write("\n");
+        data->close();
+    }
+
+    if (ui->checkAuto->isChecked())
+        ui->plot->rescaleAxes();
     ui->plot->replot();
 }
 
-void MainWindow::addRow(const QString & port)
+void MainWindow::addRow(const tableRow & row)
 {
     //tabulka
     int i = ui->table->rowCount();
     ui->table->insertRow(i);
 
     QTableWidgetItem * it ;
-    it = new QTableWidgetItem;
+    it = new QTableWidgetItem(row.name);
     ui->table->setItem(i,0,it);
 
-    it = new QTableWidgetItem(port);
+    it = new QTableWidgetItem(row.port);
     it->setFlags(Qt::ItemIsEnabled);
     ui->table->setItem(i,1,it );
 
@@ -206,19 +460,23 @@ void MainWindow::addRow(const QString & port)
     it = new QTableWidgetItem;
     it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
     it->setCheckState(Qt::Unchecked);
+    if (row.visible)
+        it->setCheckState(Qt::Checked);
     ui->table->setItem(i,3,it);
 
     //barvička
     it = new QTableWidgetItem;
     it->setFlags(Qt::ItemIsEnabled );
-    it->setBackgroundColor(random());
+    it->setBackgroundColor(row.farba);
     ui->table->setItem(i,4,it);
 
     //grafy
     QCPGraph * gr = ui->plot->addGraph();
     gr->setPen(it->backgroundColor());
-    gr->setVisible(false);
-    gr->setName(port);
+    gr->setVisible(row.visible);
+    gr->setName(row.port);
+    if (row.name.count())
+        gr->setName(row.name);
 
 }
 
@@ -280,4 +538,9 @@ void MainWindow::on_butClean_clicked()
         ui->plot->graph(i)->clearData();
     }
     time.restart();
+}
+
+void MainWindow::on_butRefresh_clicked()
+{
+    FillCombo();
 }
