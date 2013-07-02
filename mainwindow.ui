@@ -52,17 +52,17 @@
     </item>
     <item>
      <layout class="QGridLayout" name="gridLayout">
-      <item row="1" column="0">
-       <widget class="QPushButton" name="butStart">
-        <property name="text">
-         <string>Start</string>
-        </property>
-       </widget>
-      </item>
       <item row="0" column="0">
        <widget class="QPushButton" name="butOpen">
         <property name="text">
          <string>Open</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QPushButton" name="butStart">
+        <property name="text">
+         <string>Start</string>
         </property>
        </widget>
       </item>
@@ -90,16 +90,6 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="2">
-       <widget class="QPushButton" name="butClean">
-        <property name="text">
-         <string>Clean</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QComboBox" name="comboPorts"/>
-      </item>
       <item row="2" column="0">
        <widget class="QPushButton" name="butRefresh">
         <property name="text">
@@ -107,10 +97,43 @@
         </property>
        </widget>
       </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="comboPorts"/>
+      </item>
+      <item row="1" column="2">
+       <widget class="QPushButton" name="butClean">
+        <property name="text">
+         <string>Clean</string>
+        </property>
+       </widget>
+      </item>
       <item row="2" column="2">
        <widget class="QCheckBox" name="checkRec">
         <property name="text">
          <string>Record</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QPushButton" name="pushButton">
+        <property name="text">
+         <string>Speed</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QSpinBox" name="spinBox">
+        <property name="suffix">
+         <string> ms</string>
+        </property>
+        <property name="minimum">
+         <number>3</number>
+        </property>
+        <property name="maximum">
+         <number>10000</number>
+        </property>
+        <property name="value">
+         <number>50</number>
         </property>
        </widget>
       </item>

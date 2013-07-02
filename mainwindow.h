@@ -12,7 +12,8 @@ class MainWindow;
 
 
 
-#define CHANNEL_COUNT 7
+#define NUMBER_COUNT 8
+#define CHANNEL_COUNT 15
 class tableRow
 {
 public:
@@ -62,6 +63,8 @@ private slots:
     void on_butClean_clicked();
     void on_butRefresh_clicked();
     void saveSetup();
+
+    void on_pushButton_clicked();
 
 private:
     Ui::MainWindow *ui;

@@ -31,6 +31,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     //parse ini file
     list << "PA1" << "PA2" << "PB0" << "PB1" << "PC1" << "PC2" << "PC5";
+    list << "PC13"  << "PC14" << "PC15";
+    list << "PE2" << "PE3" << "PE4" << "PE5" << "PE6";
 
     QString path = QCoreApplication::applicationDirPath();
     QString name = "sniffer.ini";
@@ -261,6 +263,8 @@ void MainWindow::roznout(bool enable)
     ui->butOpen->setDisabled(enable);
     ui->butRefresh->setDisabled(enable);
     ui->comboPorts->setDisabled(enable);
+    ui->pushButton->setEnabled(enable);
+    ui->spinBox->setEnabled(enable);
 }
 
 void MainWindow::on_butOpen_clicked()
@@ -297,7 +301,7 @@ void MainWindow::on_butStart_clicked()
     }
 
     QString path = QCoreApplication::applicationDirPath();
-    QString name = QDateTime::currentDateTime().toString("dd.mm.yyyy_hh.mm.ss");
+    QString name = QDateTime::currentDateTime().toString("dd.MM.yyyy_hh.mm.ss");
     name += ".csv";
     path = path + "/" + name;
 
@@ -385,7 +389,16 @@ void MainWindow::comport_newData()
         pole[i++] = num.toInt();
     }
 
+    //rozparsovat jednotlivy bity
+    int temp = buf.toInt();
+    for (int i = 0 ; i < 8; i++)
+    {
+        pole[NUMBER_COUNT - 1 + i] = 1000 * ((temp >> i) & 1) + i * 10;
+    }
+
     ProcessValues(pole);
+
+    asm("nop");
 }
 
 
@@ -409,6 +422,13 @@ void MainWindow::ProcessValues(int *be)
     for (int i = 0 ; i < CHANNEL_COUNT; i++)
     {
         pole[i] = be[i] /4096.0 * 2.048;
+
+
+        if (pole[i] < 0)
+            continue;
+        if (pole[i] > 10)
+            continue;
+
         ui->plot->graph(i)->addData(time.toTime_t() + time.time().msec() / 1000.0, pole[i]);
         ui->table->item(i,2)->setData(Qt::DisplayRole,pole[i]);
 
@@ -543,4 +563,15 @@ void MainWindow::on_butClean_clicked()
 void MainWindow::on_butRefresh_clicked()
 {
     FillCombo();
+}
+
+void MainWindow::on_pushButton_clicked()
+{
+    if (!comport->isWritable())
+    {
+        statusBar()->showMessage(trUtf8("nelze psát do COM"));
+        return;
+    }
+    QByteArray arr = QString("speed %1\n\r").arg(ui->spinBox->value()).toAscii();
+    comport->write(arr);
 }
