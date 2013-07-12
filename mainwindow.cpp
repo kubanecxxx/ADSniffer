@@ -21,7 +21,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
 
     PortSettings nastaveni;
-    nastaveni.BaudRate = BAUD1152000;
+    nastaveni.BaudRate = BAUD115200;
     nastaveni.DataBits = DATA_8;
     nastaveni.FlowControl = FLOW_HARDWARE;
     nastaveni.Parity = PAR_NONE;
@@ -31,8 +31,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     //parse ini file
     list << "PA1" << "PA2" << "PB0" << "PB1" << "PC1" << "PC2" << "PC5";
-    list << "PC13"  << "PC14" << "PC15";
-    list << "PE2" << "PE3" << "PE4" << "PE5" << "PE6";
+    list << "PC13(1)"  << "PC14(2)" << "PC15(3)";
+    list << "PE2(4)" << "PE3(5)" << "PE4(6)" << "PE5(7)" << "PE6(8)";
 
     QString path = QCoreApplication::applicationDirPath();
     QString name = "sniffer.ini";
@@ -69,14 +69,35 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->plot->yAxis->setLabel(trUtf8("Napětí"));
     ui->plot->legend->setVisible(true);
     ui->plot->legend->setPositionStyle(QCPLegend::psTopLeft);
-    ui->plot->setRangeDrag(Qt::Horizontal | Qt::Vertical);
-    ui->plot->setRangeZoom(Qt::Horizontal | Qt::Vertical);
+    ui->plot->setRangeDrag(Qt::Horizontal |  Qt::Vertical);
+    ui->plot->setRangeZoom(Qt::Horizontal  | Qt::Vertical);
 
     rdy = true;
 
     inifile->close();
 
     QTimer::singleShot(100,this,SLOT(saveSetup()));
+    connect(ui->plot,SIGNAL(mouseDoubleClick(QMouseEvent*)), this,SLOT(plotDouble(QMouseEvent*)));
+}
+
+void MainWindow::plotDouble(QMouseEvent * evt)
+{
+    if (evt->button() == Qt::LeftButton)
+    {
+        Qt::Orientation bor;
+        bor = ui->splitter->orientation();
+
+        if (bor == Qt::Horizontal)
+            bor = Qt::Vertical;
+        else
+            bor = Qt::Horizontal;
+
+        ui->splitter->setOrientation(bor);
+    }
+    else if (evt->button() == Qt::RightButton)
+    {
+        ui->widget->setVisible(!ui->widget->isVisible());
+    }
 }
 
 void MainWindow::saveSetup()
@@ -104,6 +125,7 @@ void MainWindow::saveSetup()
 
 
     QTimer::singleShot(100,this,SLOT(saveSetup()));
+    //ui->splitter->setOrientation(Qt::Horizontal);
 }
 
 void MainWindow::iniCreate(const inidata_t &data)
@@ -393,7 +415,7 @@ void MainWindow::comport_newData()
     int temp = buf.toInt();
     for (int i = 0 ; i < 8; i++)
     {
-        pole[NUMBER_COUNT - 1 + i] = 1000 * ((temp >> i) & 1) + i * 10;
+        pole[NUMBER_COUNT - 1 + i] = 1000 * ((~(temp >> i)) & 1) + (i) * 10;
     }
 
     ProcessValues(pole);

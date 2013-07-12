@@ -65,6 +65,7 @@ private slots:
     void saveSetup();
 
     void on_pushButton_clicked();
+    void plotDouble(QMouseEvent *);
 
 private:
     Ui::MainWindow *ui;

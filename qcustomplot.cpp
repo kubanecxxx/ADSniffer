@@ -7644,7 +7644,7 @@ void QCustomPlot::mouseMoveEvent(QMouseEvent *event)
   {
     if (mDragging)
     {
-      if (mRangeDrag.testFlag(Qt::Horizontal))
+      if (mRangeDrag.testFlag(Qt::Horizontal) && event->modifiers() == Qt::NoModifier)
       {
         if (mRangeDragHorzAxis->mScaleType == QCPAxis::stLinear)
         {
@@ -7656,7 +7656,7 @@ void QCustomPlot::mouseMoveEvent(QMouseEvent *event)
           mRangeDragHorzAxis->setRange(mDragStartHorzRange.lower*diff, mDragStartHorzRange.upper*diff);
         }
       }
-      if (mRangeDrag.testFlag(Qt::Vertical))
+      if (mRangeDrag.testFlag(Qt::Vertical) && event->modifiers() == Qt::ControlModifier)
       {
         if (mRangeDragVertAxis->mScaleType == QCPAxis::stLinear)
         {
@@ -7818,12 +7818,12 @@ void QCustomPlot::wheelEvent(QWheelEvent *event)
     {
       double factor;
       double wheelSteps = event->delta()/120.0; // a single step delta is +/-120 usually
-      if (mRangeZoom.testFlag(Qt::Horizontal))
+      if (mRangeZoom.testFlag(Qt::Horizontal) && event->modifiers() == Qt::NoModifier)
       {
         factor = pow(mRangeZoomFactorHorz, wheelSteps);
         mRangeZoomHorzAxis->scaleRange(factor, mRangeZoomHorzAxis->pixelToCoord(event->pos().x()));
       }
-      if (mRangeZoom.testFlag(Qt::Vertical))
+      if (mRangeZoom.testFlag(Qt::Vertical) && event->modifiers() == Qt::ControlModifier)
       {
         factor = pow(mRangeZoomFactorVert, wheelSteps);
         mRangeZoomVertAxis->scaleRange(factor, mRangeZoomVertAxis->pixelToCoord(event->pos().y()));
